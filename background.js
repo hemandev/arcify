@@ -29,6 +29,20 @@ const backgroundSearchEngine = new SearchEngine(new BackgroundDataProvider());
 const AUTO_ARCHIVE_ALARM_NAME = 'autoArchiveTabsAlarm';
 const TAB_ACTIVITY_STORAGE_KEY = 'tabLastActivity'; // Key to store timestamps
 
+// Helper to handle async message responses with consistent error handling
+function handleAsyncMessage(handler, sendResponse, errorContext, defaultErrorData = {}) {
+    (async () => {
+        try {
+            const result = await handler();
+            sendResponse({ success: true, ...result });
+        } catch (error) {
+            Logger.error(`[Background] Error ${errorContext}:`, error);
+            sendResponse({ success: false, error: error.message, ...defaultErrorData });
+        }
+    })();
+    return true; // Indicates async response
+}
+
 // Configure Chrome side panel behavior
 chrome.sidePanel.setPanelBehavior({
     openPanelOnActionClick: true
@@ -587,213 +601,116 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         })();
         return true; // Async response
     } else if (message.action === 'switchToTab') {
-        // Handle tab switching for spotlight search results
-        (async () => {
-            try {
-                await chrome.tabs.update(message.tabId, { active: true });
-                await chrome.windows.update(message.windowId, { focused: true });
-                sendResponse({ success: true });
-            } catch (error) {
-                Logger.error('[Background] Error switching to tab:', error);
-                sendResponse({ success: false, error: error.message });
-            }
-        })();
-        return true; // Async response
+        return handleAsyncMessage(async () => {
+            await chrome.tabs.update(message.tabId, { active: true });
+            await chrome.windows.update(message.windowId, { focused: true });
+            return {};
+        }, sendResponse, 'switching to tab');
+
     } else if (message.action === 'searchTabs') {
-        // Handle async operation properly
-        (async () => {
-            try {
-                const tabs = await chrome.tabs.query({});
-                const query = message.query?.toLowerCase() || '';
-                const filteredTabs = tabs.filter(tab => {
-                    if (!tab.title || !tab.url) return false;
-                    if (!query) return true;
-                    return tab.title.toLowerCase().includes(query) ||
-                        tab.url.toLowerCase().includes(query);
-                });
-                sendResponse({ success: true, tabs: filteredTabs });
-            } catch (error) {
-                Logger.error('[Background] Error searching tabs:', error);
-                sendResponse({ success: false, error: error.message });
-            }
-        })();
-        return true; // Async response
+        return handleAsyncMessage(async () => {
+            const tabs = await chrome.tabs.query({});
+            const query = message.query?.toLowerCase() || '';
+            const filteredTabs = tabs.filter(tab => {
+                if (!tab.title || !tab.url) return false;
+                if (!query) return true;
+                return tab.title.toLowerCase().includes(query) ||
+                    tab.url.toLowerCase().includes(query);
+            });
+            return { tabs: filteredTabs };
+        }, sendResponse, 'searching tabs');
+
     } else if (message.action === 'getRecentTabs') {
-        (async () => {
-            try {
-                const tabs = await chrome.tabs.query({});
-                const storage = await chrome.storage.local.get([TAB_ACTIVITY_STORAGE_KEY]);
-                const activityData = storage[TAB_ACTIVITY_STORAGE_KEY] || {};
+        return handleAsyncMessage(async () => {
+            const tabs = await chrome.tabs.query({});
+            const storage = await chrome.storage.local.get([TAB_ACTIVITY_STORAGE_KEY]);
+            const activityData = storage[TAB_ACTIVITY_STORAGE_KEY] || {};
 
-                const tabsWithActivity = tabs
-                    .filter(tab => tab.url && tab.title)
-                    .map(tab => ({
-                        ...tab,
-                        lastActivity: activityData[tab.id] || 0
-                    }))
-                    .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0))
-                    .slice(0, message.limit || 5);
+            const tabsWithActivity = tabs
+                .filter(tab => tab.url && tab.title)
+                .map(tab => ({ ...tab, lastActivity: activityData[tab.id] || 0 }))
+                .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0))
+                .slice(0, message.limit || 5);
 
-                sendResponse({ success: true, tabs: tabsWithActivity });
-            } catch (error) {
-                Logger.error('[Background] Error getting recent tabs:', error);
-                sendResponse({ success: false, error: error.message });
-            }
-        })();
-        return true; // Async response
+            return { tabs: tabsWithActivity };
+        }, sendResponse, 'getting recent tabs');
+
     } else if (message.action === 'searchBookmarks') {
-        (async () => {
-            try {
-                const bookmarks = await chrome.bookmarks.search(message.query);
-                const filteredBookmarks = bookmarks.filter(bookmark => bookmark.url);
-                sendResponse({ success: true, bookmarks: filteredBookmarks });
-            } catch (error) {
-                Logger.error('[Background] Error searching bookmarks:', error);
-                sendResponse({ success: false, error: error.message });
-            }
-        })();
-        return true; // Async response
+        return handleAsyncMessage(async () => {
+            const bookmarks = await chrome.bookmarks.search(message.query);
+            return { bookmarks: bookmarks.filter(b => b.url) };
+        }, sendResponse, 'searching bookmarks');
+
     } else if (message.action === 'searchHistory') {
-        (async () => {
-            try {
-                const historyItems = await chrome.history.search({
-                    text: message.query,
-                    maxResults: 10,
-                    startTime: Date.now() - (7 * 24 * 60 * 60 * 1000) // Last 7 days
-                });
-                sendResponse({ success: true, history: historyItems });
-            } catch (error) {
-                Logger.error('[Background] Error searching history:', error);
-                sendResponse({ success: false, error: error.message });
-            }
-        })();
-        return true; // Async response
+        return handleAsyncMessage(async () => {
+            const historyItems = await chrome.history.search({
+                text: message.query,
+                maxResults: 10,
+                startTime: Date.now() - (7 * 24 * 60 * 60 * 1000)
+            });
+            return { history: historyItems };
+        }, sendResponse, 'searching history');
+
     } else if (message.action === 'getTopSites') {
-        (async () => {
-            try {
-                const topSites = await chrome.topSites.get();
-                sendResponse({ success: true, topSites: topSites });
-            } catch (error) {
-                Logger.error('[Background] Error getting top sites:', error);
-                sendResponse({ success: false, error: error.message });
-            }
-        })();
-        return true; // Async response
+        return handleAsyncMessage(async () => {
+            const topSites = await chrome.topSites.get();
+            return { topSites };
+        }, sendResponse, 'getting top sites');
+
     } else if (message.action === 'getAutocomplete') {
-        (async () => {
-            try {
-                const dataProvider = backgroundSearchEngine.dataProvider;
-                const suggestions = await dataProvider.getAutocompleteData(message.query);
-                sendResponse({ success: true, suggestions: suggestions });
-            } catch (error) {
-                Logger.error('[Background] Error getting autocomplete suggestions:', error);
-                sendResponse({ success: false, error: error.message, suggestions: [] });
-            }
-        })();
-        return true; // Async response
+        return handleAsyncMessage(async () => {
+            const suggestions = await backgroundSearchEngine.dataProvider.getAutocompleteData(message.query);
+            return { suggestions };
+        }, sendResponse, 'getting autocomplete suggestions', { suggestions: [] });
+
     } else if (message.action === 'getPinnedTabs') {
         Logger.log('[Background] Received getPinnedTabs message:', message);
-        (async () => {
-            try {
-                const dataProvider = backgroundSearchEngine.dataProvider;
-                Logger.log('[Background] Getting pinned tabs from data provider...');
-                const pinnedTabs = await dataProvider.getPinnedTabsData(message.query);
-                Logger.log('[Background] Sending pinned tabs response:', pinnedTabs.length, 'tabs');
-                sendResponse({ success: true, pinnedTabs: pinnedTabs });
-            } catch (error) {
-                Logger.error('[Background] Error getting pinned tabs:', error);
-                sendResponse({ success: false, error: error.message, pinnedTabs: [] });
-            }
-        })();
-        return true; // Async response
+        return handleAsyncMessage(async () => {
+            const pinnedTabs = await backgroundSearchEngine.dataProvider.getPinnedTabsData(message.query);
+            Logger.log('[Background] Sending pinned tabs response:', pinnedTabs.length, 'tabs');
+            return { pinnedTabs };
+        }, sendResponse, 'getting pinned tabs', { pinnedTabs: [] });
+
     } else if (message.action === 'getActiveSpaceColor') {
-        (async () => {
-            try {
-                const spacesResult = await chrome.storage.local.get('spaces');
-                const spaces = spacesResult.spaces || [];
+        return handleAsyncMessage(async () => {
+            const spacesResult = await chrome.storage.local.get('spaces');
+            const spaces = spacesResult.spaces || [];
+            const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-                // Get the current active tab to determine which space it belongs to
-                const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-                if (!activeTab || !activeTab.groupId || activeTab.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
-                    sendResponse({ success: true, color: 'purple' });
-                    return;
-                }
-
-                // Find the space that matches the active tab's group
-                const activeSpace = spaces.find(space => space.id === activeTab.groupId);
-
-                if (activeSpace && activeSpace.color) {
-                    sendResponse({ success: true, color: activeSpace.color });
-                } else {
-                    sendResponse({ success: true, color: 'purple' });
-                }
-            } catch (error) {
-                Logger.error('[Background] Error getting active space color:', error);
-                sendResponse({ success: false, error: error.message, color: 'purple' });
+            if (!activeTab || !activeTab.groupId || activeTab.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+                return { color: 'purple' };
             }
-        })();
-        return true; // Async response
+
+            const activeSpace = spaces.find(space => space.id === activeTab.groupId);
+            return { color: activeSpace?.color || 'purple' };
+        }, sendResponse, 'getting active space color', { color: 'purple' });
+
     } else if (message.action === 'performSearch') {
-        // Handle search using the user's default search engine via chrome.search API
-        (async () => {
-            try {
+        return handleAsyncMessage(async () => {
+            const disposition = message.mode === SpotlightTabMode.NEW_TAB ? 'NEW_TAB' : 'CURRENT_TAB';
+            await chrome.search.query({ text: message.query, disposition });
+            return {};
+        }, sendResponse, 'performing search');
 
-                // Determine disposition based on spotlight tab mode
-                const disposition = message.mode === SpotlightTabMode.NEW_TAB ? 'NEW_TAB' : 'CURRENT_TAB';
-
-                // Use chrome.search API to search with the user's default search engine
-                await chrome.search.query({
-                    text: message.query,
-                    disposition: disposition
-                });
-
-                sendResponse({ success: true });
-            } catch (error) {
-                Logger.error('[Background] Error performing search:', error);
-                sendResponse({ success: false, error: error.message });
-            }
-        })();
-        return true; // Async response
     } else if (message.action === 'getSpotlightSuggestions') {
-        // Handle spotlight suggestions requests from overlay.js
-        (async () => {
-            try {
-                const query = message.query.trim();
+        return handleAsyncMessage(async () => {
+            const query = message.query.trim();
+            const results = query
+                ? await backgroundSearchEngine.getSpotlightSuggestionsUsingCache(query, message.mode)
+                : await backgroundSearchEngine.getSpotlightSuggestionsImmediate('', message.mode);
+            return { results };
+        }, sendResponse, 'getting spotlight suggestions', { results: [] });
 
-                // Get suggestions using the background search engine with debouncing
-                const results = query
-                    ? await backgroundSearchEngine.getSpotlightSuggestionsUsingCache(query, message.mode)
-                    : await backgroundSearchEngine.getSpotlightSuggestionsImmediate('', message.mode);
-
-                sendResponse({ success: true, results: results });
-            } catch (error) {
-                Logger.error('[Background] Error getting spotlight suggestions:', error);
-                sendResponse({ success: false, error: error.message, results: [] });
-            }
-        })();
-        return true; // Async response
     } else if (message.action === 'spotlightHandleResult') {
-        // Handle spotlight result actions from overlay.js and newtab.js
-        (async () => {
-            try {
-                // Validate inputs
-                if (!message.result || !message.result.type || !message.mode) {
-                    throw new Error('Invalid spotlight result message');
-                }
-
-                // Use sender's tab ID if available (for new tab page), otherwise use provided tabId
-                const tabId = (sender.tab && sender.tab.id) ? sender.tab.id : message.tabId;
-
-                // Handle the result action (pass tabId for optimization)
-                await backgroundSearchEngine.handleResultAction(message.result, message.mode, tabId);
-                sendResponse({ success: true });
-            } catch (error) {
-                Logger.error('[Background] Error handling spotlight result:', error);
-                sendResponse({ success: false, error: error.message });
+        return handleAsyncMessage(async () => {
+            if (!message.result || !message.result.type || !message.mode) {
+                throw new Error('Invalid spotlight result message');
             }
-        })();
-        return true; // Async response
+            const tabId = sender.tab?.id || message.tabId;
+            await backgroundSearchEngine.handleResultAction(message.result, message.mode, tabId);
+            return {};
+        }, sendResponse, 'handling spotlight result');
+
     } else if (message.action === 'spotlightOpened') {
         // Track when spotlight opens in a tab
         if (sender.tab && sender.tab.id) {
