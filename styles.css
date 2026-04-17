@@ -296,7 +296,7 @@ h3 {
     background: none;
     border: none;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     color: #333;
     padding: 4px 0;
     border-radius: 4px;
@@ -425,7 +425,7 @@ h3 {
 /* Space icon in space name */
 .space-icon {
     font-size: 14px;
-    margin-right: 4px;
+    margin-right: 6px;
     flex-shrink: 0;
 }
 

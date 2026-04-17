@@ -770,6 +770,18 @@ async function initSidebar() {
 
                 return space;
             }));
+
+            // Restore persisted fields (like icon) from storage
+            const stored = await chrome.storage.local.get('spaces');
+            if (stored.spaces) {
+                const savedMap = {};
+                stored.spaces.forEach(s => { savedMap[s.name] = s; });
+                spaces.forEach(space => {
+                    const saved = savedMap[space.name];
+                    if (saved?.icon) space.icon = saved.icon;
+                });
+            }
+
             spaces.forEach(space => createSpaceElement(space));
             Logger.log("initial save", spaces);
             saveSpaces();
