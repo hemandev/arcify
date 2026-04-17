@@ -558,6 +558,9 @@ export function setupQuickPinListener(moveTabToSpace, moveTabToPinned, moveTabTo
             showUrlCopyToast();
             sendResponse({ success: true });
             return false; // Synchronous response
+        } else if (request.command === "switchSpace" && request.spaceId) {
+            Logger.log("[SpaceSwitch] Switching to space:", request.spaceId);
+            setActiveSpaceFunc(request.spaceId);
         } else if (request.action === "spotlightOpened") {
             Logger.log("[Spotlight] Spotlight opened with mode:", request.mode);
             // Highlight new tab button if spotlight is in new-tab mode

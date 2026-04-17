@@ -116,6 +116,20 @@ chrome.commands.onCommand.addListener(async function (command) {
         await injectSpotlightScript(SpotlightTabMode.NEW_TAB);
     } else if (command === "copyCurrentUrl") {
         await copyCurrentTabUrlWithFallback();
+    } else if (command === "NextSpace" || command === "PrevSpace") {
+        const spacesResult = await chrome.storage.local.get('spaces');
+        const spaces = spacesResult.spaces || [];
+        if (spaces.length < 2) return;
+
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const currentIndex = spaces.findIndex(s => s.id === activeTab?.groupId);
+        let nextIndex;
+        if (command === "NextSpace") {
+            nextIndex = (currentIndex + 1) % spaces.length;
+        } else {
+            nextIndex = (currentIndex - 1 + spaces.length) % spaces.length;
+        }
+        chrome.runtime.sendMessage({ command: "switchSpace", spaceId: spaces[nextIndex].id });
     }
 });
 
@@ -123,6 +137,9 @@ chrome.commands.onCommand.addListener(async function (command) {
 // Mainly used to close spotlight overlays in all tabs when it's
 // closed in 1 / user switches to another tab with overlay open.
 const spotlightOpenTabs = new Set();
+
+// Track the active media (YouTube) tab
+let activeMediaTabId = null;
 
 // Close spotlight in tracked tabs only
 async function closeSpotlightInTrackedTabs() {
@@ -564,6 +581,12 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
     if (spotlightOpenTabs.has(tabId)) {
         spotlightOpenTabs.delete(tabId);
     }
+
+    // Clean up media player if the YouTube tab was closed
+    if (tabId === activeMediaTabId) {
+        activeMediaTabId = null;
+        chrome.runtime.sendMessage({ action: 'mediaStateStopped' }).catch(() => {});
+    }
 });
 
 // Optional: Listen for messages from options page to immediately update alarm
@@ -731,6 +754,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         sendResponse({ success: true });
         return false; // Synchronous response
+
+    } else if (message.action === 'mediaStateUpdate') {
+        // From YouTube content script -> forward to sidebar
+        if (sender.tab) {
+            activeMediaTabId = sender.tab.id;
+            chrome.runtime.sendMessage({
+                action: 'mediaStateUpdate',
+                ...message,
+                tabId: sender.tab.id,
+            });
+        }
+        return false;
+
+    } else if (message.action === 'mediaStateStopped') {
+        // YouTube navigated away from video page
+        if (sender.tab && sender.tab.id === activeMediaTabId) {
+            activeMediaTabId = null;
+            chrome.runtime.sendMessage({ action: 'mediaStateStopped' });
+        }
+        return false;
+
+    } else if (message.action === 'mediaCommand') {
+        // From sidebar -> forward to the YouTube content script tab
+        if (activeMediaTabId) {
+            chrome.tabs.sendMessage(activeMediaTabId, { action: message.command });
+        }
+        return false;
+
+    } else if (message.action === 'mediaGoToTab') {
+        // Switch to the YouTube tab
+        if (activeMediaTabId) {
+            chrome.tabs.update(activeMediaTabId, { active: true });
+        }
+        return false;
     }
 
     return false; // No async response needed

@@ -557,6 +557,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.tabs.onActivated.addListener(handleTabActivated);
     chrome.tabGroups.onRemoved.addListener(handleTabGroupRemoved);
 
+    // Setup media player controls
+    setupMediaPlayer();
+
     // Setup Quick Pin listener
     setupQuickPinListener(moveTabToSpace, moveTabToPinned, moveTabToTemp, activeSpaceId, setActiveSpace, activatePinnedTabByURL);
 
@@ -3982,5 +3985,89 @@ function setupFolderContextMenu(folderElement, space, item = null) {
             }
         };
         document.addEventListener('click', closeContextMenu);
+    });
+}
+
+/**
+ * Media Player - YouTube playback controls in sidebar
+ * Shows a mini player bar when a YouTube video is playing in any tab.
+ */
+function setupMediaPlayer() {
+    const player = document.getElementById('mediaPlayer');
+    const thumbnail = document.getElementById('mediaThumbnail');
+    const title = document.getElementById('mediaTitle');
+    const channel = document.getElementById('mediaChannel');
+    const progressBar = document.getElementById('mediaProgressBar');
+    const playPauseBtn = document.getElementById('mediaPlayPause');
+    const skipBackBtn = document.getElementById('mediaSkipBack');
+    const skipForwardBtn = document.getElementById('mediaSkipForward');
+    const goToTabBtn = document.getElementById('mediaGoToTab');
+    const iconPlay = playPauseBtn.querySelector('.media-icon-play');
+    const iconPause = playPauseBtn.querySelector('.media-icon-pause');
+
+    let isPlaying = false;
+
+    function showPlayer() {
+        player.style.display = '';
+    }
+
+    function hidePlayer() {
+        player.style.display = 'none';
+    }
+
+    function updatePlayPauseIcon(playing) {
+        isPlaying = playing;
+        if (playing) {
+            iconPlay.style.display = 'none';
+            iconPause.style.display = '';
+        } else {
+            iconPlay.style.display = '';
+            iconPause.style.display = 'none';
+        }
+    }
+
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    // Listen for media state updates from background
+    chrome.runtime.onMessage.addListener((message) => {
+        if (message.action === 'mediaStateUpdate') {
+            showPlayer();
+            title.textContent = message.title || 'Unknown';
+            channel.textContent = message.channel || '';
+            if (message.thumbnail) {
+                thumbnail.src = message.thumbnail;
+                thumbnail.style.display = '';
+            } else {
+                thumbnail.style.display = 'none';
+            }
+            updatePlayPauseIcon(message.isPlaying);
+            if (message.duration > 0) {
+                const pct = (message.currentTime / message.duration) * 100;
+                progressBar.style.width = pct + '%';
+            }
+        } else if (message.action === 'mediaStateStopped') {
+            hidePlayer();
+        }
+    });
+
+    // Control buttons
+    playPauseBtn.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'mediaCommand', command: 'mediaTogglePlayPause' });
+    });
+
+    skipBackBtn.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'mediaCommand', command: 'mediaSkipBack' });
+    });
+
+    skipForwardBtn.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'mediaCommand', command: 'mediaSkipForward' });
+    });
+
+    goToTabBtn.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'mediaGoToTab' });
     });
 }

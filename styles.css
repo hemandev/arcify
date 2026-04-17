@@ -764,6 +764,151 @@ h3 {
     }
 }
 
+/* ===== Media Player Bar ===== */
+.media-player {
+    width: 100%;
+    background-color: rgba(0, 0, 0, 0.06);
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: mediaPlayerSlideIn 0.2s ease;
+}
+
+@keyframes mediaPlayerSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.media-player-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+}
+
+.media-player-thumbnail {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.media-player-text {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.media-player-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.media-player-channel {
+    font-size: 10px;
+    color: #888;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.media-player-progress {
+    width: 100%;
+    height: 3px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.media-player-progress-bar {
+    height: 100%;
+    width: 0%;
+    background-color: #ff0000;
+    border-radius: 2px;
+    transition: width 0.3s linear;
+}
+
+.media-player-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.media-player-btn {
+    background: none;
+    border: none;
+    color: #555;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.media-player-btn:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+    color: #333;
+}
+
+.media-player-btn-play {
+    width: 36px;
+    height: 36px;
+    background-color: rgba(0, 0, 0, 0.08);
+    border-radius: 50%;
+}
+
+.media-player-btn-play:hover {
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+/* Dark mode media player */
+@media (prefers-color-scheme: dark) {
+    .media-player {
+        background-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .media-player-title {
+        color: #eee;
+    }
+
+    .media-player-channel {
+        color: #999;
+    }
+
+    .media-player-progress {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .media-player-btn {
+        color: #ccc;
+    }
+
+    .media-player-btn:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+        color: #fff;
+    }
+
+    .media-player-btn-play {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .media-player-btn-play:hover {
+        background-color: rgba(255, 255, 255, 0.18);
+    }
+}
+
 .space-switcher {
     display: flex;
     gap: 8px;

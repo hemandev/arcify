@@ -39,6 +39,16 @@
       ],
       "run_at": "document_start",
       "all_frames": false
+    },
+    {
+      "matches": [
+        "*://*.youtube.com/*"
+      ],
+      "js": [
+        "youtube-controller.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ],
   "web_accessible_resources": [
@@ -95,6 +105,12 @@
     },
     "copyCurrentUrl": {
       "description": "Copy current tab URL"
+    },
+    "NextSpace": {
+      "description": "Switch to next space"
+    },
+    "PrevSpace": {
+      "description": "Switch to previous space"
     }
   },
   "options_page": "options.html"

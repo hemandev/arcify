@@ -44,6 +44,33 @@
                 <span>+</span> New Tab
             </button>
         </div>
+        <div class="media-player" id="mediaPlayer" style="display: none;">
+            <div class="media-player-info">
+                <img class="media-player-thumbnail" id="mediaThumbnail" src="" alt="" />
+                <div class="media-player-text">
+                    <span class="media-player-title" id="mediaTitle"></span>
+                    <span class="media-player-channel" id="mediaChannel"></span>
+                </div>
+            </div>
+            <div class="media-player-progress">
+                <div class="media-player-progress-bar" id="mediaProgressBar"></div>
+            </div>
+            <div class="media-player-controls">
+                <button class="media-player-btn" id="mediaSkipBack" title="Skip back 10s">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 3C17.15 3 21.08 6.03 22.44 10.22L20.54 10.95C19.43 7.46 16.24 5 12.5 5C10.54 5 8.77 5.74 7.41 6.95L10 9.5H3V2.5L5.59 5.09C7.32 3.58 9.62 2.5 12.14 2.5L12.5 3zM11 9.5H13V13.67L16.75 15.94L15.75 17.57L11 14.75V9.5z"/></svg>
+                </button>
+                <button class="media-player-btn media-player-btn-play" id="mediaPlayPause" title="Play/Pause">
+                    <svg class="media-icon-play" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    <svg class="media-icon-pause" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                </button>
+                <button class="media-player-btn" id="mediaSkipForward" title="Skip forward 10s">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M11.5 3C6.85 3 2.92 6.03 1.56 10.22L3.46 10.95C4.57 7.46 7.76 5 11.5 5C13.46 5 15.23 5.74 16.59 6.95L14 9.5H21V2.5L18.41 5.09C16.68 3.58 14.38 2.5 11.86 2.5L11.5 3zM13 9.5H11V13.67L7.25 15.94L8.25 17.57L13 14.75V9.5z"/></svg>
+                </button>
+                <button class="media-player-btn" id="mediaGoToTab" title="Switch to tab">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+                </button>
+            </div>
+        </div>
         <div class="space-switcher-container">
             <div class="space-switcher" id="spaceSwitcher">
                 <!-- Space switcher buttons will be added here -->
