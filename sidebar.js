@@ -874,9 +874,52 @@ function createSpaceElement(space) {
         }
     });
 
+    // Handle emoji picker clicks
+    const emojiGrid = spaceElement.querySelector('.emoji-picker-grid');
+    if (emojiGrid) {
+        // Highlight current emoji on dropdown show
+        const optionsContainer = spaceElement.querySelector('.space-options-container');
+        optionsContainer.addEventListener('mouseenter', () => {
+            emojiGrid.querySelectorAll('.emoji-option').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.emoji === (space.icon || ''));
+            });
+        });
+
+        emojiGrid.addEventListener('click', async (e) => {
+            const emojiBtn = e.target.closest('.emoji-option');
+            if (!emojiBtn) return;
+
+            const emoji = emojiBtn.dataset.emoji;
+            space.icon = emoji || undefined;
+
+            // Update active state
+            emojiGrid.querySelectorAll('.emoji-option').forEach(btn => btn.classList.remove('active'));
+            emojiBtn.classList.add('active');
+
+            // Update the space icon display next to the name
+            const iconEl = spaceContainer.querySelector('.space-icon');
+            if (iconEl) {
+                iconEl.textContent = emoji || '';
+                iconEl.style.display = emoji ? '' : 'none';
+            }
+
+            saveSpaces();
+            await updateSpaceSwitcher();
+        });
+    }
+
     // Set up space name input
     const nameInput = spaceElement.querySelector('.space-name');
     nameInput.value = space.name;
+
+    // Add space icon element before the name input
+    const spaceNameContainer = spaceElement.querySelector('.space-name-container');
+    const spaceIconEl = document.createElement('span');
+    spaceIconEl.className = 'space-icon';
+    spaceIconEl.textContent = space.icon || '';
+    spaceIconEl.style.display = space.icon ? '' : 'none';
+    spaceNameContainer.insertBefore(spaceIconEl, nameInput);
+
     nameInput.addEventListener('change', async () => {
         // Update bookmark folder name
         const oldName = space.name;
@@ -947,6 +990,12 @@ function createSpaceElement(space) {
     // Set up clean tabs button
     const cleanBtn = spaceElement.querySelector('.clean-tabs-btn');
     cleanBtn.addEventListener('click', () => cleanTemporaryTabs(space.id));
+
+    // Set up inline new tab button
+    const inlineNewTabBtn = spaceElement.querySelector('.new-tab-inline');
+    if (inlineNewTabBtn) {
+        inlineNewTabBtn.addEventListener('click', () => createNewTab());
+    }
 
     // Set up options menu
     const newFolderBtn = spaceElement.querySelector('.new-folder-btn');
@@ -1139,10 +1188,18 @@ async function updateSpaceSwitcher() {
 
     spaces.forEach(space => {
         const button = document.createElement('button');
-        button.textContent = space.name;
+        button.title = space.name;
         button.dataset.spaceId = space.id; // Store space ID
         button.classList.toggle('active', space.id === activeSpaceId);
         button.draggable = true; // Make the button draggable
+
+        // If space has an emoji icon, show it instead of a dot
+        if (space.icon) {
+            button.textContent = space.icon;
+            button.classList.add('has-icon');
+        } else {
+            button.textContent = space.name; // Hidden by CSS (font-size: 0)
+        }
 
         button.addEventListener('click', async () => {
             if (button.classList.contains('dragging-switcher')) return;
