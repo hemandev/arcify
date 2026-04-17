@@ -431,6 +431,12 @@ async function setupAutoArchiveAlarm() {
 chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === AUTO_ARCHIVE_ALARM_NAME) {
         await runAutoArchiveCheck();
+    } else if (alarm.name.startsWith('liveFolderRefresh_')) {
+        // Notify sidebar to refresh the live folder
+        const folderId = alarm.name.replace('liveFolderRefresh_', '');
+        chrome.runtime.sendMessage({ action: 'refreshLiveFolder', folderId }).catch(() => {
+            // Sidebar may not be open
+        });
     }
 });
 

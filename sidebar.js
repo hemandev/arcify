@@ -40,6 +40,7 @@ import {
 import { BookmarkUtils } from './bookmark-utils.js';
 import { Logger } from './logger.js';
 import { MOUSE_BUTTON, CSS_CLASSES, TIMING } from './constants.js';
+import { LiveFolder } from './live-folder.js';
 
 // DOM Elements
 const spacesList = document.getElementById('spacesList');
@@ -54,7 +55,27 @@ let activeSpaceId = null;
 let previousSpaceId = null;
 let isCreatingSpace = false;
 let isOpeningBookmark = false;
+let isCreatingLiveFolderTabs = false;
 let isDraggingTab = false;
+
+// Listen for live folder refresh messages from background (alarm-based)
+chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === 'refreshLiveFolder' && message.folderId) {
+        const folderEl = document.querySelector(`[data-live-folder-id="${message.folderId}"]`);
+        if (folderEl && activeSpaceId) {
+            LiveFolder.getAll().then(all => {
+                const config = all[message.folderId];
+                if (config) {
+                    const refreshBtn = folderEl.querySelector('.live-folder-refresh-btn');
+                    if (refreshBtn) refreshBtn.classList.add('spinning');
+                    LiveFolder.refreshFolder(config, folderEl, activeSpaceId, createTabElement).then(() => {
+                        if (refreshBtn) refreshBtn.classList.remove('spinning');
+                    });
+                }
+            });
+        }
+    }
+});
 let currentWindow = null;
 let defaultSpaceName = 'Home';
 let showAllOpenTabsInCollapsedFolders = false; // default Arc behavior is false (active-only)
@@ -934,6 +955,18 @@ function createSpaceElement(space) {
 
     newFolderBtn.addEventListener('click', () => {
         createNewFolder(spaceContainer);
+    });
+
+    // Set up live folder button
+    const newLiveFolderBtn = spaceElement.querySelector('.new-live-folder-btn');
+    newLiveFolderBtn.addEventListener('click', async () => {
+        const config = await LiveFolder.showConfigDialog();
+        if (config) {
+            config.spaceId = space.id;
+            await LiveFolder.save(config.id, config);
+            const pinnedContainer = spaceContainer.querySelector('[data-tab-type="pinned"]');
+            LiveFolder.createFolderElement(config, pinnedContainer, space.id, createTabElement);
+        }
     });
 
     deleteSpaceBtn.addEventListener('click', () => {
@@ -2532,7 +2565,17 @@ async function loadTabs(space, pinnedContainer, tempContainer) {
         }
 
 
-        // Load temporary tabs
+        // Load temporary tabs - collect live folder tab IDs to exclude
+        const liveFolderTabIds = new Set();
+        try {
+            const allLiveFolders = await LiveFolder.getAll();
+            for (const lf of Object.values(allLiveFolders)) {
+                if (lf.spaceId === space.id && lf.tabIds) {
+                    lf.tabIds.forEach(id => liveFolderTabIds.add(id));
+                }
+            }
+        } catch (e) { /* ignore */ }
+
         let tabsToLoad = [...space.temporaryTabs]; // Create a copy
 
         if (invertTabOrder) {
@@ -2545,11 +2588,24 @@ async function loadTabs(space, pinnedContainer, tempContainer) {
             const representedAsPinned = representedPinnedTabIds.has(tabId);
             Logger.log("representedAsPinned", representedAsPinned);
 
-            if (tab && !representedAsPinned) {
+            if (tab && !representedAsPinned && !liveFolderTabIds.has(tabId)) {
                 const tabElement = await createTabElement(tab);
                 tempContainer.appendChild(tabElement);
             }
         });
+
+        // Load live folders for this space
+        try {
+            const liveFolders = await LiveFolder.getAll();
+            for (const [folderId, folderConfig] of Object.entries(liveFolders)) {
+                if (folderConfig.spaceId === space.id) {
+                    LiveFolder.createFolderElement(folderConfig, pinnedContainer, space.id, createTabElement);
+                }
+            }
+        } catch (lfError) {
+            Logger.error('Error loading live folders:', lfError);
+        }
+
     } catch (error) {
         Logger.error('Error loading tabs:', error);
     }
@@ -3242,8 +3298,8 @@ function cleanTemporaryTabs(spaceId) {
 }
 
 function handleTabCreated(tab) {
-    if (isCreatingSpace || isOpeningBookmark) {
-        Logger.log('Skipping tab creation handler - space is being created');
+    if (isCreatingSpace || isOpeningBookmark || isCreatingLiveFolderTabs || globalThis.__arcifyCreatingLiveFolderTabs) {
+        Logger.log('Skipping tab creation handler - space/bookmark/live-folder is being created');
         return;
     }
     chrome.windows.getCurrent({ populate: false }, async (currentWindow) => {
