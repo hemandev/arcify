@@ -17,6 +17,9 @@ This Chrome extension provides Arc browser-like sidebar functionality for managi
 - `localstorage.js` - Storage management for persistent data
 - `utils.js` - Utility functions used throughout the extension
 - `icons.js` - SVG icon definitions for the UI
+- `github-api.js` - GitHub API client for PAT auth and PR fetching
+- `live-folder.js` - Live folder UI, config dialog, refresh logic
+- `youtube-controller.js` - YouTube media control content script
 
 ## Architecture
 
@@ -112,6 +115,14 @@ Utility functions for generating UUIDs, getting settings, getting favicon URLs, 
 - `MouseButton` - Enum for mouse button values
 - Default space names and colors
 - Global state flags: `isCreatingSpace`, `isOpeningBookmark`
+
+## Live Folders
+
+Live folders display GitHub PRs as real browser tabs inside a folder. Configured via a dialog (PAT auth, repo selection, filter, refresh interval). PRs are fetched from the GitHub Search API and rendered using the standard `createTabElement` flow. On refresh, new PRs open as tabs and closed/merged PRs are auto-removed. Auto-refresh uses `chrome.alarms`. Config and tab IDs are persisted in `chrome.storage.local` under the `liveFolders` key. A `globalThis.__arcifyCreatingLiveFolderTabs` flag prevents `handleTabCreated` from duplicating PR tabs into the temporary section.
+
+## YouTube Media Controller
+
+A content script (`youtube-controller.js`) injected on YouTube pages that tracks playback state (title, channel, thumbnail, play/pause, progress) and sends updates to the sidebar via `chrome.runtime.sendMessage`. The sidebar renders a mini media player bar with play/pause, skip forward/back, and go-to-tab controls. The background service worker relays messages between the content script and sidebar and tracks the active media tab ID.
 
 ## Initialization Flow
 
