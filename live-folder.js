@@ -335,32 +335,52 @@ export class LiveFolder {
         try {
             const prs = await GitHubAPI.fetchPullRequests(folderConfig.config);
 
-            // Get current PR tabs in this folder
+            // Build a stable tabId <-> prUrl mapping from persisted config
+            // This survives tab navigation — we track which tab belongs to which PR by ID, not current URL
+            const tabIdToPrUrl = new Map(Object.entries(folderConfig.tabIdToPrUrl || {}));
+            const prUrlToTabId = new Map();
+            for (const [tabId, prUrl] of tabIdToPrUrl) {
+                prUrlToTabId.set(prUrl, parseInt(tabId));
+            }
+
+            // Build DOM lookup by tab ID
             const existingTabs = folderContent.querySelectorAll('.tab');
-            const existingUrls = new Map();
+            const tabIdToElement = new Map();
             existingTabs.forEach(el => {
-                existingUrls.set(el.dataset.url, el);
+                const tabId = parseInt(el.dataset.tabId);
+                if (tabId) tabIdToElement.set(tabId, el);
             });
 
-            const newPrUrls = new Set(prs.map(pr => pr.url));
-            const liveFolderTabIds = new Set(folderConfig.tabIds || []);
-
-            // Close tabs for PRs that are no longer open (merged/closed)
-            for (const [url, tabEl] of existingUrls) {
-                if (!newPrUrls.has(url)) {
-                    const tabId = parseInt(tabEl.dataset.tabId);
-                    if (tabId) {
-                        liveFolderTabIds.delete(tabId);
-                        try { await chrome.tabs.remove(tabId); } catch (e) { /* already closed */ }
-                    }
-                    tabEl.remove();
+            // Verify which mapped tabs still exist in Chrome
+            for (const [tabIdStr] of tabIdToPrUrl) {
+                const tabId = parseInt(tabIdStr);
+                try { await chrome.tabs.get(tabId); } catch (e) {
+                    // Tab was closed by user — remove from mapping
+                    const prUrl = tabIdToPrUrl.get(tabIdStr);
+                    tabIdToPrUrl.delete(tabIdStr);
+                    prUrlToTabId.delete(prUrl);
+                    const el = tabIdToElement.get(tabId);
+                    if (el) el.remove();
                 }
             }
 
-            // Add new PRs
+            const newPrUrls = new Set(prs.map(pr => pr.url));
+
+            // Close tabs for PRs that are no longer open (merged/closed)
+            for (const [prUrl, tabId] of prUrlToTabId) {
+                if (!newPrUrls.has(prUrl)) {
+                    tabIdToPrUrl.delete(String(tabId));
+                    prUrlToTabId.delete(prUrl);
+                    const el = tabIdToElement.get(tabId);
+                    if (el) el.remove();
+                    try { await chrome.tabs.remove(tabId); } catch (e) { /* already closed */ }
+                }
+            }
+
+            // Add new PRs (only for PRs that don't already have an associated tab)
             globalThis.__arcifyCreatingLiveFolderTabs = true;
             for (const pr of prs) {
-                if (existingUrls.has(pr.url)) continue; // Already shown
+                if (prUrlToTabId.has(pr.url)) continue; // Already has a live tab (even if user navigated away)
 
                 // Create a real tab for this PR
                 try {
@@ -386,7 +406,11 @@ export class LiveFolder {
                     if (tabElement) {
                         tabElement.dataset.liveFolderId = folderConfig.id;
                         tabElement.dataset.prNumber = pr.number;
-                        liveFolderTabIds.add(tab.id);
+                        tabElement.dataset.prUrl = pr.url;
+
+                        // Track the mapping: tabId -> original PR URL
+                        tabIdToPrUrl.set(String(tab.id), pr.url);
+                        prUrlToTabId.set(pr.url, tab.id);
 
                         // Remove placeholder if present
                         const placeholder = folderContent.querySelector('.tab-placeholder');
@@ -406,8 +430,9 @@ export class LiveFolder {
                 badge.style.display = prs.length > 0 ? 'inline-flex' : 'none';
             }
 
-            // Update last refreshed
-            folderConfig.tabIds = [...liveFolderTabIds];
+            // Persist the stable tabId <-> prUrl mapping
+            folderConfig.tabIds = [...prUrlToTabId.values()];
+            folderConfig.tabIdToPrUrl = Object.fromEntries(tabIdToPrUrl);
             folderConfig.lastRefreshed = Date.now();
             await this.save(folderConfig.id, folderConfig);
 
