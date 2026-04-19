@@ -4131,13 +4131,25 @@ function setupMediaPlayer() {
     const iconPause = playPauseBtn.querySelector('.media-icon-pause');
 
     let isPlaying = false;
+    let staleTimer = null;
+    const STALE_TIMEOUT_MS = 5000;
+
+    function resetStaleTimer() {
+        if (staleTimer) clearTimeout(staleTimer);
+        staleTimer = setTimeout(() => {
+            // No updates received — content script likely died or tab was backgrounded
+            hidePlayer();
+        }, STALE_TIMEOUT_MS);
+    }
 
     function showPlayer() {
         player.style.display = '';
+        resetStaleTimer();
     }
 
     function hidePlayer() {
         player.style.display = 'none';
+        if (staleTimer) { clearTimeout(staleTimer); staleTimer = null; }
     }
 
     function updatePlayPauseIcon(playing) {
@@ -4160,7 +4172,7 @@ function setupMediaPlayer() {
     // Listen for media state updates from background
     chrome.runtime.onMessage.addListener((message) => {
         if (message.action === 'mediaStateUpdate') {
-            showPlayer();
+            showPlayer(); // also resets stale timer
             title.textContent = message.title || 'Unknown';
             channel.textContent = message.channel || '';
             if (message.thumbnail) {

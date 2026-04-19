@@ -69,17 +69,22 @@
         lastReportedState = stateKey;
 
         try {
-            chrome.runtime.sendMessage(state);
+            chrome.runtime.sendMessage(state).catch(() => {
+                // Receiver not available (sidebar closed, etc.) — ignore.
+                // Do NOT cleanup; keep tracking so we can resume when the sidebar reopens.
+            });
         } catch (e) {
-            // Extension context invalidated, clean up
-            cleanup();
+            // Synchronous send error (context truly gone during extension update).
+            // Still don't cleanup — the interval will retry and succeed after reload.
         }
     }
 
     function attachToVideo() {
         const v = document.querySelector('video');
-        if (!v || v === video) return;
+        if (!v) return;
+        if (v === video) return;
 
+        // Detach old listeners implicitly (old element will be GC'd)
         video = v;
 
         video.addEventListener('play', () => sendState(true));
@@ -89,7 +94,15 @@
 
         // Send periodic updates for progress bar (every 1s)
         if (updateInterval) clearInterval(updateInterval);
-        updateInterval = setInterval(() => sendState(), 1000);
+        updateInterval = setInterval(() => {
+            // Re-check in case YouTube swapped the video element (SPA navigation)
+            const current = document.querySelector('video');
+            if (current && current !== video) {
+                attachToVideo();
+                return;
+            }
+            sendState();
+        }, 1000);
 
         // Initial state
         setTimeout(() => sendState(true), 500);
@@ -111,14 +124,19 @@
         } else {
             cleanup();
             try {
-                chrome.runtime.sendMessage({ action: 'mediaStateStopped' });
+                chrome.runtime.sendMessage({ action: 'mediaStateStopped' }).catch(() => {});
             } catch (e) { }
         }
     }
 
     // Listen for commands from the sidebar/background
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (!video) return;
+        // Try to re-acquire video if we lost it
+        if (!video) {
+            const v = document.querySelector('video');
+            if (v) attachToVideo();
+            else return;
+        }
         switch (message.action) {
             case 'mediaPlay':
                 video.play();

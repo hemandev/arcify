@@ -138,8 +138,20 @@ chrome.commands.onCommand.addListener(async function (command) {
 // closed in 1 / user switches to another tab with overlay open.
 const spotlightOpenTabs = new Set();
 
-// Track the active media (YouTube) tab
+// Track the active media (YouTube) tab — persisted in session storage to survive SW restarts
 let activeMediaTabId = null;
+
+// Restore activeMediaTabId from session storage on service worker wake
+chrome.storage.session.get('activeMediaTabId', (result) => {
+    if (result.activeMediaTabId) {
+        activeMediaTabId = result.activeMediaTabId;
+    }
+});
+
+function setActiveMediaTabId(tabId) {
+    activeMediaTabId = tabId;
+    chrome.storage.session.set({ activeMediaTabId: tabId });
+}
 
 // Close spotlight in tracked tabs only
 async function closeSpotlightInTrackedTabs() {
@@ -590,7 +602,7 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
 
     // Clean up media player if the YouTube tab was closed
     if (tabId === activeMediaTabId) {
-        activeMediaTabId = null;
+        setActiveMediaTabId(null);
         chrome.runtime.sendMessage({ action: 'mediaStateStopped' }).catch(() => {});
     }
 });
@@ -763,21 +775,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     } else if (message.action === 'mediaStateUpdate') {
         // From YouTube content script -> forward to sidebar
+        // Prefer the active/focused tab to avoid background tabs hijacking the player
         if (sender.tab) {
-            activeMediaTabId = sender.tab.id;
-            chrome.runtime.sendMessage({
-                action: 'mediaStateUpdate',
-                ...message,
-                tabId: sender.tab.id,
-            });
+            const senderTabId = sender.tab.id;
+
+            // Only accept updates from:
+            // 1. The currently tracked media tab, OR
+            // 2. A new tab if no media tab is tracked, OR
+            // 3. A tab that is currently active (focused by the user)
+            const shouldAccept = !activeMediaTabId || senderTabId === activeMediaTabId || sender.tab.active;
+
+            if (shouldAccept) {
+                setActiveMediaTabId(senderTabId);
+                chrome.runtime.sendMessage({
+                    action: 'mediaStateUpdate',
+                    ...message,
+                    tabId: senderTabId,
+                }).catch(() => {});
+            }
         }
         return false;
 
     } else if (message.action === 'mediaStateStopped') {
         // YouTube navigated away from video page
         if (sender.tab && sender.tab.id === activeMediaTabId) {
-            activeMediaTabId = null;
-            chrome.runtime.sendMessage({ action: 'mediaStateStopped' });
+            setActiveMediaTabId(null);
+            chrome.runtime.sendMessage({ action: 'mediaStateStopped' }).catch(() => {});
         }
         return false;
 
